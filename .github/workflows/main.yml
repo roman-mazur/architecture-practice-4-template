@@ -16,7 +16,7 @@ jobs:
 
       - name: Install Docker Compose
         run:
-          curl -L https://github.com/docker/compose-cli/blob/main/scripts/install/install_linux.sh | sh
+          curl -L https://raw.githubusercontent.com/docker/compose-cli/main/scripts/install/install_linux.sh | sh
 
       - name: Run integration test
         run:
