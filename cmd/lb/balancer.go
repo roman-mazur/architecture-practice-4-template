@@ -63,21 +63,12 @@ func minServerIndex() int {
 	minIndex := -1
 	minConnCnt := -1
 
-	mutex.Lock()
-	defer mutex.Unlock()
-
 	for i, server := range serversPool {
 		if server.Healthy {
-			minIndex = i
-			minConnCnt = server.ConnCnt
-			break
-		}
-	}
-
-	for i, server := range serversPool {
-		if server.Healthy && server.ConnCnt < minConnCnt {
-			minIndex = i
-			minConnCnt = server.ConnCnt
+			if minIndex == -1 || server.ConnCnt < minConnCnt {
+				minIndex = i
+				minConnCnt = server.ConnCnt
+			}
 		}
 	}
 
