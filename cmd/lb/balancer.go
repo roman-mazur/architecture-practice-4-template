@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/roman-mazur/design-practice-2-template/httptools"
-	"github.com/roman-mazur/design-practice-2-template/signal"
+	"github.com/AKushch1337/architecture-lab4-5/httptools"
+	"github.com/AKushch1337/architecture-lab4-5/signal"
 )
 
 var (
@@ -24,6 +24,7 @@ var (
 type Server struct {
 	URL     string
 	ConnCnt int
+	Healthy bool
 }
 
 var (
@@ -54,15 +55,27 @@ func health(s *Server) bool {
 	if resp.StatusCode != http.StatusOK {
 		return false
 	}
+	s.Healthy = true
 	return true
 }
 
 func minServerIndex() int {
-	minIndex := 0
-	minConnCnt := serversPool[0].ConnCnt
+	minIndex := -1
+	minConnCnt := -1
+
+	mutex.Lock()
+	defer mutex.Unlock()
 
 	for i, server := range serversPool {
-		if server.ConnCnt < minConnCnt {
+		if server.Healthy {
+			minIndex = i
+			minConnCnt = server.ConnCnt
+			break
+		}
+	}
+
+	for i, server := range serversPool {
+		if server.Healthy && server.ConnCnt < minConnCnt {
 			minIndex = i
 			minConnCnt = server.ConnCnt
 		}
@@ -77,6 +90,13 @@ func forward(rw http.ResponseWriter, r *http.Request) error {
 
 	mutex.Lock()
 	minIndex := minServerIndex()
+
+	if minIndex == -1 {
+		mutex.Unlock()
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		return fmt.Errorf("no healthy servers available")
+	}
+
 	dst := serversPool[minIndex]
 	dst.ConnCnt++
 	mutex.Unlock()
@@ -115,10 +135,12 @@ func main() {
 	flag.Parse()
 
 	for _, server := range serversPool {
+		server.Healthy = health(server)
 		go func(s *Server) {
 			for range time.Tick(10 * time.Second) {
 				mutex.Lock()
-				log.Printf("%s: health=%t, connCnt=%d", s.URL, health(s), s.ConnCnt)
+				s.Healthy = health(s)
+				log.Printf("%s: health=%t, connCnt=%d", s.URL, s.Healthy, s.ConnCnt)
 				mutex.Unlock()
 			}
 		}(server)
