@@ -2,6 +2,7 @@ package integration
 
 import (
 	"fmt"
+	. "gopkg.in/check.v1"
 	"net/http"
 	"os"
 	"testing"
@@ -14,17 +15,29 @@ var client = http.Client{
 	Timeout: 3 * time.Second,
 }
 
+type IntegrationTestSuite struct{}
+
+var _ = Suite(&IntegrationTestSuite{})
+
 func TestBalancer(t *testing.T) {
+
+	TestingT(t)
+
+}
+
+func (s *IntegrationTestSuite) TestGetRequest(c *C) {
 	if _, exists := os.LookupEnv("INTEGRATION_TEST"); !exists {
-		t.Skip("Integration test is not enabled")
+		c.Skip("Integration test is not enabled")
 	}
 
-	// TODO: Реалізуйте інтеграційний тест для балансувальникка.
-	resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", baseAddress))
-	if err != nil {
-		t.Error(err)
+	for i := 0; i < 3; i++ {
+		resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", baseAddress))
+		if err != nil {
+			c.Error(err)
+		}
+		c.Check(resp.Header.Get("lb-from"), Equals, "server"+string(rune(i+1))+":8080")
 	}
-	t.Logf("response from [%s]", resp.Header.Get("lb-from"))
+
 }
 
 func BenchmarkBalancer(b *testing.B) {
