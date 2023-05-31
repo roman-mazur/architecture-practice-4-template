@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"net/http"
@@ -14,20 +15,22 @@ import (
 )
 
 var (
-	port = flag.Int("port", 8090, "load balancer port")
+	port       = flag.Int("port", 8090, "load balancer port")
 	timeoutSec = flag.Int("timeout-sec", 3, "request timeout time in seconds")
-	https = flag.Bool("https", false, "whether backends support HTTPs")
+	https      = flag.Bool("https", false, "whether backends support HTTPs")
 
 	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
 )
 
 var (
-	timeout = time.Duration(*timeoutSec) * time.Second
+	timeout     = time.Duration(*timeoutSec) * time.Second
 	serversPool = []string{
-		"server1:8080",
-		"server2:8080",
-		"server3:8080",
+		"127.0.0.1:8080",
+		"127.0.0.1:8081",
+		"127.0.0.1:8082",
 	}
+
+	aliveServersPool = map[int]string{}
 )
 
 func scheme() string {
@@ -49,6 +52,18 @@ func health(dst string) bool {
 		return false
 	}
 	return true
+}
+
+func hash(address string) int {
+	hash := fnv.New32()
+	hash.Write([]byte(address))
+	hashed := int(hash.Sum32())
+	return hashed
+}
+
+func getServer(address string) string {
+	clientHash := hash(address) % len(aliveServersPool)
+	return aliveServersPool[clientHash]
 }
 
 func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
@@ -88,18 +103,24 @@ func main() {
 	flag.Parse()
 
 	// TODO: Використовуйте дані про стан сервреа, щоб підтримувати список тих серверів, яким можна відправляти ззапит.
-	for _, server := range serversPool {
+	for index, server := range serversPool {
 		server := server
+		index := index
 		go func() {
 			for range time.Tick(10 * time.Second) {
-				log.Println(server, health(server))
+				isHealth := health(server)
+				log.Println(server, isHealth)
+				if isHealth {
+					aliveServersPool[index] = server
+				}
 			}
 		}()
 	}
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		// TODO: Рееалізуйте свій алгоритм балансувальника.
-		forward(serversPool[0], rw, r)
+		server := getServer(r.RemoteAddr)
+		forward(server, rw, r)
 	}))
 
 	log.Println("Starting load balancer...")
