@@ -30,7 +30,11 @@ var (
 		"127.0.0.1:8082",
 	}
 
-	aliveServersPool = map[int]string{}
+	aliveServersPool = []string{
+		"127.0.0.1:8080",
+		"127.0.0.1:8081",
+		"127.0.0.1:8082",
+	}
 )
 
 func scheme() string {
@@ -99,11 +103,8 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
 	}
 }
 
-func main() {
-	flag.Parse()
-
-	// TODO: Використовуйте дані про стан сервреа, щоб підтримувати список тих серверів, яким можна відправляти ззапит.
-	for index, server := range serversPool {
+func checkServers(servers []string, aliveServers []string) {
+	for index, server := range servers {
 		server := server
 		index := index
 		go func() {
@@ -111,14 +112,21 @@ func main() {
 				isHealth := health(server)
 				log.Println(server, isHealth)
 				if isHealth {
-					aliveServersPool[index] = server
+					aliveServers[index] = server
+				} else {
+					aliveServers[index] = ""
 				}
 			}
 		}()
 	}
+}
+
+func main() {
+	flag.Parse()
+
+	checkServers(serversPool, aliveServersPool)
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// TODO: Рееалізуйте свій алгоритм балансувальника.
 		server := getServer(r.RemoteAddr)
 		forward(server, rw, r)
 	}))
