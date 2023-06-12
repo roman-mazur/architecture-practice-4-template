@@ -25,4 +25,4 @@ jobs:
       run: docker-compose -f docker-compose.yaml -f docker-compose.test.yaml up --exit-code-from test
 
     - name: Unit Test
-      run: go test -v ./cmd/lb
+      run: go test -v ./...
