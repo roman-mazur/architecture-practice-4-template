@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 )
 
 var target = flag.String("target", "http://localhost:8090", "request target")
+var responseSize = flag.Int("size", 2023, "desired response size")
 
 func main() {
 	flag.Parse()
@@ -17,6 +19,7 @@ func main() {
 
 	for range time.Tick(1 * time.Second) {
 		resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", *target))
+		resp.Header.Set("Response-Size", strconv.Itoa(*responseSize))
 		if err == nil {
 			log.Printf("response %d", resp.StatusCode)
 		} else {

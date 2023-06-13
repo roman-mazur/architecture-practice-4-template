@@ -43,9 +43,20 @@ func main() {
 
 		rw.Header().Set("content-type", "application/json")
 		rw.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(rw).Encode([]string{
-			"1", "2",
-		})
+
+		responseSize := 1024
+		if sizeHeader := r.Header.Get("Response-Size"); sizeHeader != "" {
+			if size, err := strconv.Atoi(sizeHeader); err == nil && size > 0 {
+				responseSize = size
+			}
+		}
+
+		responseData := make([]string, responseSize)
+		for i := 0; i < responseSize; i++ {
+			responseData[i] = strconv.Itoa(responseSize)
+		}
+
+		_ = json.NewEncoder(rw).Encode(responseData)
 	})
 
 	h.Handle("/report", report)
