@@ -18,6 +18,8 @@ var client = http.Client{
 	Timeout: 3 * time.Second,
 }
 
+//test
+
 func sendRequest(baseAddress string, responseSize int, client *http.Client) (*http.Response, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/some-data", baseAddress), nil)
 	if err != nil {
