@@ -142,3 +142,46 @@ func TestDb_Segmentation(t *testing.T) {
 		}
 	})
 }
+
+func TestDb_Delete(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test-db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	db, err := NewDb(dir, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	pairs := [][]string{
+		{"key1", "value1"},
+		{"key2", "value2"},
+		{"key3", "value3"},
+	}
+
+	for _, pair := range pairs {
+		err := db.Put(pair[0], pair[1])
+		if err != nil {
+			t.Errorf("Cannot put %s: %s", pair[0], err)
+		}
+		value, _ := db.Get(pair[0])
+		if value != pair[1] {
+			t.Errorf("Bad value returned expected %s, got %s", pair[1], value)
+		}
+	}
+
+	t.Run("delete", func(t *testing.T) {
+		err := db.Delete("key2")
+		if err != nil {
+			t.Errorf("Error: %s", err)
+		}
+
+		_, err = db.Get("key2")
+		if err == ErrNotFound {
+			t.Error("Key didn't delete")
+		}
+	})
+}

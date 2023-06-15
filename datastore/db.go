@@ -2,6 +2,7 @@ package datastore
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -27,12 +28,12 @@ type KeyPosition struct {
 }
 
 type Db struct {
-	out         *os.File
-	outOffset   int64
-	dir         string
-	segmentSize int64
-	segIndex    int
-	segments    []*Segment
+	out       *os.File
+	outOffset int64
+	dir       string
+	segSize   int64
+	segIndex  int
+	segments  []*Segment
 
 	indexOps     chan IndexOp
 	keyPositions chan *KeyPosition
@@ -49,7 +50,7 @@ func NewDb(dir string, segmentSize int64) (*Db, error) {
 	db := &Db{
 		segments:     make([]*Segment, 0),
 		dir:          dir,
-		segmentSize:  segmentSize,
+		segSize:      segmentSize,
 		indexOps:     make(chan IndexOp),
 		keyPositions: make(chan *KeyPosition),
 		putOps:       make(chan entry),
@@ -271,7 +272,7 @@ func (db *Db) startPutRoutine() {
 				db.putDone <- err
 				continue
 			}
-			if stat.Size()+length > db.segmentSize {
+			if stat.Size()+length > db.segSize {
 				err := db.makeSegment()
 				if err != nil {
 					db.putDone <- err
@@ -298,4 +299,30 @@ func (db *Db) Put(key, value string) error {
 	}
 	db.putOps <- e
 	return <-db.putDone
+}
+
+func (db *Db) Delete(key string) error {
+
+	db.setKey(key, -1)
+
+	outFilePath := filepath.Join(db.dir, outFileName+"0")
+	outFile, err := os.OpenFile(outFilePath, os.O_RDWR, 0644)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	marker := []byte("DELETED\n")
+	valueBytes := []byte(key + ":")
+	scanner := bufio.NewScanner(outFile)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if bytes.HasPrefix(line, valueBytes) {
+			outFile.Seek(int64(-len(line)), os.SEEK_CUR)
+			outFile.Write(marker)
+			break
+		}
+	}
+
+	return nil
 }
