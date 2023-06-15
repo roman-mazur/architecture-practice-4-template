@@ -2,7 +2,6 @@ package datastore
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -229,6 +228,9 @@ func (db *Db) Get(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if value == "DELETED" {
+		return "", ErrNotFound
+	}
 	return value, nil
 }
 
@@ -302,27 +304,5 @@ func (db *Db) Put(key, value string) error {
 }
 
 func (db *Db) Delete(key string) error {
-
-	db.setKey(key, -1)
-
-	outFilePath := filepath.Join(db.dir, outFileName+"0")
-	outFile, err := os.OpenFile(outFilePath, os.O_RDWR, 0644)
-	if err != nil {
-		return err
-	}
-	defer outFile.Close()
-
-	marker := []byte("DELETED\n")
-	valueBytes := []byte(key + ":")
-	scanner := bufio.NewScanner(outFile)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if bytes.HasPrefix(line, valueBytes) {
-			outFile.Seek(int64(-len(line)), os.SEEK_CUR)
-			outFile.Write(marker)
-			break
-		}
-	}
-
-	return nil
+	return db.Put(key, "DELETED")
 }
