@@ -142,3 +142,57 @@ func TestDb_Segmentation(t *testing.T) {
 		}
 	})
 }
+
+func TestDb_Delete(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test-db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	db, err := NewDb(dir, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	pairs := [][]string{
+		{"key1", "value1"},
+		{"key2", "value2"},
+		{"key3", "value3"},
+	}
+
+	for _, pair := range pairs {
+		err := db.Put(pair[0], pair[1])
+		if err != nil {
+			t.Errorf("Cannot put %s: %s", pair[0], err)
+		}
+		err = db.Delete(pair[0])
+		if err != nil {
+			t.Errorf("Cannot delete %s: %s", pair[0], err)
+		}
+
+		_, err = db.Get(pair[0])
+		if err != ErrNotFound {
+			t.Errorf("Bad value returned expected %s, got %s", pair[1], err)
+		}
+	}
+
+	t.Run("delete", func(t *testing.T) {
+		if err := db.out.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		db, err = NewDb(dir, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, pair := range pairs {
+			_, err := db.Get(pair[0])
+			if err != ErrNotFound {
+				t.Errorf("Expect ErrNotFound, get: %s", err)
+			}
+		}
+	})
+}
