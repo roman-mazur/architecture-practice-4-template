@@ -18,10 +18,8 @@ var client = http.Client{
 	Timeout: 3 * time.Second,
 }
 
-//test
-
 func sendRequest(baseAddress string, responseSize int, client *http.Client) (*http.Response, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/some-data", baseAddress), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/some-data?key=team", baseAddress), nil)
 	if err != nil {
 		log.Printf("error creating request: %s", err)
 		return nil, err
@@ -72,7 +70,11 @@ func (s *IntegrationTestSuite) BenchmarkBalancer(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		_, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", baseAddress))
-		assert.NoError(s.t, err)
+		resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data?key=team", baseAddress))
+		if err != nil {
+			log.Printf("error: %s", err)
+			b.FailNow()
+		}
+		assert.Equal(b, http.StatusOK, resp.StatusCode)
 	}
 }
