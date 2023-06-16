@@ -14,6 +14,7 @@ import (
 
 const baseAddress = "http://balancer:8090"
 
+// test
 var client = http.Client{
 	Timeout: 3 * time.Second,
 }
