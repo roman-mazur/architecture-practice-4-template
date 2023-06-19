@@ -126,21 +126,16 @@ func (b *Balancer) getServerIndexWithLowestLoad(serverLoad map[string]int64, ser
 	defer mu.Unlock()
 
 	minLoad := int64(^uint64(0) >> 1)
-	var minLoadServer string
+	var minLoadServer int
 
-	for _, server := range serversPool {
+	for i, server := range serversPool {
 		load := serverLoad[server]
 		if load < minLoad {
 			minLoad = load
-			minLoadServer = server
+			minLoadServer = i
 		}
 	}
-	for i, value := range serversPool {
-		if value == minLoadServer {
-			return i
-		}
-	}
-	return -1
+	return minLoadServer
 }
 
 func (b *Balancer) Start() {
