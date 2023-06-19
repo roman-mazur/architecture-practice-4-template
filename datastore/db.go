@@ -233,12 +233,16 @@ func (db *Db) Get(key string) (string, error) {
 	if keyPos == nil {
 		return "", ErrNotFound
 	}
-	value, err := keyPos.segment.getFromSegment(keyPos.position)
+	mark, err := keyPos.segment.getMark(keyPos.position)
 	if err != nil {
 		return "", err
 	}
-	if value == "DELETED" {
+	if mark == 1 {
 		return "", ErrNotFound
+	}
+	value, err := keyPos.segment.getFromSegment(keyPos.position)
+	if err != nil {
+		return "", err
 	}
 	return value, nil
 }
@@ -251,6 +255,26 @@ func (db *Db) getPos(key string) *KeyPosition {
 	db.indexOps <- op
 	keyPos := <-db.keyPositions
 	return keyPos
+}
+
+func (seg *Segment) getMark(position int64) (int, error) {
+	file, err := os.Open(seg.filePath)
+	if err != nil {
+		return -1, err
+	}
+	defer file.Close()
+
+	_, err = file.Seek(position, 0)
+	if err != nil {
+		return -1, err
+	}
+
+	reader := bufio.NewReader(file)
+	mark, err := readMark(reader)
+	if err != nil {
+		return -1, err
+	}
+	return mark, nil
 }
 
 func (seg *Segment) getFromSegment(position int64) (string, error) {
@@ -307,11 +331,17 @@ func (db *Db) Put(key, value string) error {
 	e := entry{
 		key:   key,
 		value: value,
+		mark:  0,
 	}
 	db.putOps <- e
 	return <-db.putDone
 }
 
 func (db *Db) Delete(key string) error {
-	return db.Put(key, "DELETED")
+	e := entry{
+		key:  key,
+		mark: 1,
+	}
+	db.putOps <- e
+	return <-db.putDone
 }

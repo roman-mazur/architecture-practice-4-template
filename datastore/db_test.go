@@ -174,7 +174,7 @@ func TestDb_Delete(t *testing.T) {
 
 		_, err = db.Get(pair[0])
 		if err != ErrNotFound {
-			t.Errorf("Bad value returned expected %s, got %s", pair[1], err)
+			t.Errorf("Expect ErrNotFound, get: %s", err)
 		}
 	}
 
