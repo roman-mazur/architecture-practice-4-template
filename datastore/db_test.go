@@ -196,3 +196,65 @@ func TestDb_Delete(t *testing.T) {
 		}
 	})
 }
+
+func TestDb_Recover(t *testing.T) {
+	dir, err := ioutil.TempDir("", "db_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	db, err := NewDb(dir, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	err = db.Put("key1", "value1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.Put("key2", "value2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.Put("key3", "value3")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dbRecovered, err := NewDb(dir, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dbRecovered.Close()
+
+	value, err := dbRecovered.Get("key1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "value1" {
+		t.Errorf("Bad value returned for key1, expected 'value1', got '%s'", value)
+	}
+
+	value, err = dbRecovered.Get("key2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "value2" {
+		t.Errorf("Bad value returned for key2, expected 'value2', got '%s'", value)
+	}
+
+	value, err = dbRecovered.Get("key3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "value3" {
+		t.Errorf("Bad value returned for key3, expected 'value3', got '%s'", value)
+	}
+}
