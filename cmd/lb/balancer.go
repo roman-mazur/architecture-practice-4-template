@@ -139,11 +139,10 @@ func (lb *LoadBalancer) Serve(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (lb *LoadBalancer) Heartbeat() {
-	for {
+	for range time.Tick(lb.heartbeat) {
 		for _, s := range lb.servers {
 			s.CheckHealth()
 		}
-		time.Sleep(lb.heartbeat)
 	}
 }
 
