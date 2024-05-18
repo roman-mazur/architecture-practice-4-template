@@ -74,11 +74,15 @@ func LoadBalancerInit(servers []string, heartbeat time.Duration, timeout time.Du
 func (lb *LoadBalancer) syncPickServer() *Server {
 	lb.pickServerLock.Lock()
 	defer lb.pickServerLock.Unlock()
-	return lb.pickMethod(lb.aliveServers())
+	server := lb.pickMethod(lb.aliveServers())
+	server.load.Add(1)
+	return server
 }
 
 func (lb *LoadBalancer) forward(rw http.ResponseWriter, r *http.Request) error {
 	dst := lb.syncPickServer()
+	defer dst.load.Add(-1)
+
 	if dst == nil {
 		rw.WriteHeader(http.StatusServiceUnavailable)
 		return fmt.Errorf("no alive servers")
@@ -90,9 +94,6 @@ func (lb *LoadBalancer) forward(rw http.ResponseWriter, r *http.Request) error {
 	fwdRequest.URL.Host = dst.addr
 	fwdRequest.URL.Scheme = dst.Scheme()
 	fwdRequest.Host = dst.addr
-
-	dst.load.Add(1)
-	defer dst.load.Add(-1)
 
 	resp, err := http.DefaultClient.Do(fwdRequest)
 	if err == nil {
