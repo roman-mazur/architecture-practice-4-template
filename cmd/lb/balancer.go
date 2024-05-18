@@ -61,7 +61,7 @@ type LoadBalancer struct {
 func LoadBalancerInit(servers []string, heartbeat time.Duration, timeout time.Duration) *LoadBalancer {
 	var srvs []*Server
 	for _, s := range servers {
-		srvs = append(srvs, &Server{addr: s, timeout: timeout})
+		srvs = append(srvs, &Server{addr: s, timeout: timeout, secured: *https})
 	}
 	return &LoadBalancer{
 		servers:    srvs,
