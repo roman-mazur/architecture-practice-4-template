@@ -130,19 +130,6 @@ func (lb *LoadBalancer) aliveServers() []*Server {
 	return alive
 }
 
-func leastConnections(servers []*Server) *Server {
-	if len(servers) == 0 {
-		return nil
-	}
-	least := servers[0]
-	for _, s := range servers {
-		if s.load.Load() < least.load.Load() {
-			least = s
-		}
-	}
-	return least
-}
-
 func (lb *LoadBalancer) Serve(rw http.ResponseWriter, r *http.Request) {
 	err := lb.forward(rw, r)
 	if err != nil {
@@ -160,17 +147,26 @@ func (lb *LoadBalancer) Heartbeat() {
 	}
 }
 
+func leastConnections(servers []*Server) *Server {
+	if len(servers) == 0 {
+		return nil
+	}
+	least := servers[0]
+	for _, s := range servers {
+		if s.load.Load() < least.load.Load() {
+			least = s
+		}
+	}
+	return least
+}
+
 func main() {
 	flag.Parse()
-	lb := &LoadBalancer{
-		servers: []*Server{
-			{addr: "server1:8080", secured: *https},
-			{addr: "server2:8080", secured: *https},
-			{addr: "server3:8080", secured: *https},
-		},
-		heartbeat: 3 * time.Second,
-		timeout:   time.Duration(*timeoutSec) * time.Second,
-	}
+	lb := LoadBalancerInit(
+		[]string{"server1:8080", "server2:8080", "server3:8080"},
+		3*time.Second,
+		time.Duration(*timeoutSec)*time.Second,
+	)
 
 	go lb.Heartbeat()
 
