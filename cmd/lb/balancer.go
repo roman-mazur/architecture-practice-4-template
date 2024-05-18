@@ -4,13 +4,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/roman-mazur/architecture-practice-4-template/httptools"
+	"github.com/roman-mazur/architecture-practice-4-template/signal"
 	"io"
 	"log"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"time"
-
-	"github.com/roman-mazur/architecture-practice-4-template/httptools"
-	"github.com/roman-mazur/architecture-practice-4-template/signal"
 )
 
 var (
@@ -21,19 +22,11 @@ var (
 	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
 )
 
-var (
-	timeout     = time.Duration(*timeoutSec) * time.Second
-	serversPool = []*Server{
-		{addr: "server1:8080", secured: *https},
-		{addr: "server2:8080", secured: *https},
-		{addr: "server3:8080", secured: *https},
-	}
-)
-
 type Server struct {
 	addr    string
 	alive   bool
-	load    int
+	load    atomic.Int32
+	timeout time.Duration
 	secured bool
 }
 
@@ -44,27 +37,62 @@ func (s *Server) Scheme() string {
 	return "http"
 }
 
-func (s *Server) Health() bool {
-	ctx, _ := context.WithTimeout(context.Background(), timeout)
+func (s *Server) CheckHealth() {
+	ctx, _ := context.WithTimeout(context.Background(), s.timeout)
 	req, _ := http.NewRequestWithContext(ctx, "GET",
 		fmt.Sprintf("%s://%s/health", s.Scheme(), s.addr), nil)
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return false
+
+	if err != nil || resp.StatusCode != http.StatusOK {
+		s.alive = false
+	} else {
+		s.alive = true
 	}
-	if resp.StatusCode != http.StatusOK {
-		return false
-	}
-	return true
 }
 
-func forward(dst *Server, rw http.ResponseWriter, r *http.Request) error {
-	ctx, _ := context.WithTimeout(r.Context(), timeout)
+type LoadBalancer struct {
+	servers        []*Server
+	pickServerLock sync.Mutex
+	heartbeat      time.Duration
+	timeout        time.Duration
+	pickMethod     func([]*Server) *Server
+}
+
+func LoadBalancerInit(servers []string, heartbeat time.Duration, timeout time.Duration) *LoadBalancer {
+	var srvs []*Server
+	for _, s := range servers {
+		srvs = append(srvs, &Server{addr: s, timeout: timeout})
+	}
+	return &LoadBalancer{
+		servers:    srvs,
+		heartbeat:  heartbeat,
+		timeout:    timeout,
+		pickMethod: leastConnections,
+	}
+}
+
+func (lb *LoadBalancer) syncPickServer() *Server {
+	lb.pickServerLock.Lock()
+	defer lb.pickServerLock.Unlock()
+	return lb.pickMethod(lb.aliveServers())
+}
+
+func (lb *LoadBalancer) forward(rw http.ResponseWriter, r *http.Request) error {
+	dst := lb.syncPickServer()
+	if dst == nil {
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		return fmt.Errorf("no alive servers")
+	}
+
+	ctx, _ := context.WithTimeout(r.Context(), lb.timeout)
 	fwdRequest := r.Clone(ctx)
 	fwdRequest.RequestURI = ""
 	fwdRequest.URL.Host = dst.addr
 	fwdRequest.URL.Scheme = dst.Scheme()
 	fwdRequest.Host = dst.addr
+
+	dst.load.Add(1)
+	defer dst.load.Add(-1)
 
 	resp, err := http.DefaultClient.Do(fwdRequest)
 	if err == nil {
@@ -91,23 +119,61 @@ func forward(dst *Server, rw http.ResponseWriter, r *http.Request) error {
 	}
 }
 
+func (lb *LoadBalancer) aliveServers() []*Server {
+	var alive []*Server
+	for _, s := range lb.servers {
+		if s.alive {
+			alive = append(alive, s)
+		}
+	}
+	return alive
+}
+
+func leastConnections(servers []*Server) *Server {
+	if len(servers) == 0 {
+		return nil
+	}
+	least := servers[0]
+	for _, s := range servers {
+		if s.load.Load() < least.load.Load() {
+			least = s
+		}
+	}
+	return least
+}
+
+func (lb *LoadBalancer) Serve(rw http.ResponseWriter, r *http.Request) {
+	err := lb.forward(rw, r)
+	if err != nil {
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		log.Printf("Failed to process request: %s", err)
+	}
+}
+
+func (lb *LoadBalancer) Heartbeat() {
+	for {
+		for _, s := range lb.servers {
+			s.CheckHealth()
+		}
+		time.Sleep(lb.heartbeat)
+	}
+}
+
 func main() {
 	flag.Parse()
-
-	// TODO: Використовуйте дані про стан сервреа, щоб підтримувати список тих серверів, яким можна відправляти ззапит.
-	for _, server := range serversPool {
-		server := server
-		go func() {
-			for range time.Tick(10 * time.Second) {
-				log.Println(server, server.Health())
-			}
-		}()
+	lb := &LoadBalancer{
+		servers: []*Server{
+			{addr: "server1:8080", secured: *https},
+			{addr: "server2:8080", secured: *https},
+			{addr: "server3:8080", secured: *https},
+		},
+		heartbeat: 3 * time.Second,
+		timeout:   time.Duration(*timeoutSec) * time.Second,
 	}
 
-	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// TODO: Рееалізуйте свій алгоритм балансувальника.
-		forward(serversPool[0], rw, r)
-	}))
+	go lb.Heartbeat()
+
+	frontend := httptools.CreateServer(*port, http.HandlerFunc(lb.Serve))
 
 	log.Println("Starting load balancer...")
 	log.Printf("Tracing support enabled: %t", *traceEnabled)
