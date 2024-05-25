@@ -1,9 +1,9 @@
-FROM golang:1.22 as build
+FROM golang:1.20 as build
 
 WORKDIR /go/src/practice-4
 COPY . .
 
-RUN go test ./... -v
+RUN go test ./...
 ENV CGO_ENABLED=0
 RUN go install ./cmd/...
 
