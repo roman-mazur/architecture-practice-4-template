@@ -4,9 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/roman-mazur/architecture-practice-4-template/httptools"
@@ -14,20 +16,22 @@ import (
 )
 
 var (
-	port = flag.Int("port", 8090, "load balancer port")
+	port       = flag.Int("port", 8090, "load balancer port")
 	timeoutSec = flag.Int("timeout-sec", 3, "request timeout time in seconds")
-	https = flag.Bool("https", false, "whether backends support HTTPs")
+	https      = flag.Bool("https", false, "whether backends support HTTPs")
 
 	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
 )
 
 var (
-	timeout = time.Duration(*timeoutSec) * time.Second
+	timeout     = time.Duration(*timeoutSec) * time.Second
 	serversPool = []string{
 		"server1:8080",
 		"server2:8080",
 		"server3:8080",
 	}
+	healthyServers = make(map[string]bool)
+	mu             sync.Mutex
 )
 
 func scheme() string {
@@ -84,22 +88,51 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
 	}
 }
 
+func hash(s string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return h.Sum32()
+}
+
 func main() {
 	flag.Parse()
 
-	// TODO: Використовуйте дані про стан сервреа, щоб підтримувати список тих серверів, яким можна відправляти ззапит.
+	for _, server := range serversPool {
+		healthyServers[server] = true
+	}
+
 	for _, server := range serversPool {
 		server := server
 		go func() {
 			for range time.Tick(10 * time.Second) {
-				log.Println(server, health(server))
+				isHealthy := health(server)
+				mu.Lock()
+				healthyServers[server] = isHealthy
+				mu.Unlock()
+				log.Println(server, isHealthy)
 			}
 		}()
 	}
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// TODO: Рееалізуйте свій алгоритм балансувальника.
-		forward(serversPool[0], rw, r)
+		mu.Lock()
+		defer mu.Unlock()
+
+		clientAddress := r.RemoteAddr
+		serverIndex := int(hash(clientAddress)) % len(serversPool)
+
+		for i := 0; i < len(serversPool); i++ {
+			server := serversPool[serverIndex]
+			if healthyServers[server] {
+				err := forward(server, rw, r)
+				if err == nil {
+					return
+				}
+			}
+			serverIndex = (serverIndex + 1) % len(serversPool)
+		}
+
+		http.Error(rw, "Service Unavailable", http.StatusServiceUnavailable)
 	}))
 
 	log.Println("Starting load balancer...")
