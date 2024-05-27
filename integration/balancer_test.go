@@ -2,11 +2,12 @@ package integration
 
 import (
 	"fmt"
-	. "gopkg.in/check.v1"
 	"net/http"
 	"os"
 	"testing"
 	"time"
+
+	. "gopkg.in/check.v1"
 )
 
 func Test(t *testing.T) { TestingT(t) }

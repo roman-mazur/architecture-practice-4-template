@@ -1,38 +1,70 @@
 package main
 
 import (
+	"bytes"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
-	"github.com/stretchr/testify/assert"
+	. "gopkg.in/check.v1"
 )
 
-func TestHealth(t *testing.T) {
-	assert := assert.New(t)
+type FakeAlwaysTrueHealthChecker struct{}
 
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		rw.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	assert.True(health(server.URL[len("http://"):]), "Health function should return true")
+func (hc *FakeAlwaysTrueHealthChecker) Check(server string) bool {
+	return true
 }
 
-func TestForward(t *testing.T) {
-	assert := assert.New(t)
+type FakeReturnRequestBodyRequestSender struct{}
 
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		rw.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
+func (rs *FakeReturnRequestBodyRequestSender) Send(request *http.Request) (*http.Response, error) {
+	bodyBytes, err := ioutil.ReadAll(request.Body)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Response{
+		StatusCode: 200,
+		Proto:      "HTTP/1.1",
+		Header:     make(http.Header),
+		Body:       ioutil.NopCloser(bytes.NewBuffer(bodyBytes)),
+		Request:    &http.Request{},
+		Close:      false,
+	}, nil
+}
 
-	req, err := http.NewRequest("GET", "http://localhost:8090", nil)
-	assert.NoError(err)
+func Test(t *testing.T) { TestingT(t) }
 
-	rw := httptest.NewRecorder()
+type MySuite struct{}
 
-	err = forward(server.URL[len("http://"):], rw, req)
-	assert.NoError(err, "Forward function should not return error")
-	assert.Equal(http.StatusOK, rw.Result().StatusCode, "Expected status code to be %v, but got %v", http.StatusOK, rw.Result().StatusCode)
+var _ = Suite(&MySuite{})
+
+func (s *MySuite) TestScheme(c *C) {
+	*https = true
+	c.Assert(scheme(), Equals, "https")
+
+	*https = false
+	c.Assert(scheme(), Equals, "http")
+}
+
+func (s *MySuite) TestBalancer(c *C) {
+	healthChecker = &FakeAlwaysTrueHealthChecker{}
+	requestSender = &FakeReturnRequestBodyRequestSender{}
+	serversPool = []string{"http://server1:1", "http://server2:1", "http://server3:1"}
+	healthCheck(serversPool)
+	time.Sleep(10 * time.Second)
+
+	server := chooseServer()
+	c.Assert(server, NotNil)
+	c.Assert(strings.Contains(server, "http://server"), Equals, true)
+
+	err := forward("http://server1:1", httptest.NewRecorder(), httptest.NewRequest("GET", "http://server1:1", strings.NewReader("body length 14")))
+	c.Assert(err, Equals, nil)
+	err = forward("http://server3:1", httptest.NewRecorder(), httptest.NewRequest("GET", "http://server3:1", strings.NewReader("body length 14")))
+	c.Assert(err, Equals, nil)
+
+	server = chooseServer()
+	c.Assert(server, Equals, "http://server2:1")
 }
