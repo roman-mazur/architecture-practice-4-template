@@ -1,7 +1,14 @@
-FROM golang:1.22 as build
+FROM golang:1.22 AS builder
 
 WORKDIR /go/src/practice-4
 COPY . .
 
-ENV INTEGRATION_TEST=1
-ENTRYPOINT ["go", "test", "./integration"]
+RUN go mod download
+RUN go test ./...
+
+FROM alpine:latest
+
+COPY --from=builder /go/src/practice-4 /app
+
+WORKDIR /app
+CMD ["go", "test", "./..."]

@@ -4,7 +4,6 @@ networks:
   servers:
 
 services:
-
   balancer:
     build: .
     command: "lb"

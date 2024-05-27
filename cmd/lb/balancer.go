@@ -4,9 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/roman-mazur/architecture-practice-4-template/httptools"
@@ -14,20 +16,17 @@ import (
 )
 
 var (
-	port = flag.Int("port", 8090, "load balancer port")
-	timeoutSec = flag.Int("timeout-sec", 3, "request timeout time in seconds")
-	https = flag.Bool("https", false, "whether backends support HTTPs")
-
+	port         = flag.Int("port", 8090, "load balancer port")
+	timeoutSec   = flag.Int("timeout-sec", 3, "request timeout time in seconds")
+	https        = flag.Bool("https", false, "whether backends support HTTPs")
 	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
 )
 
 var (
-	timeout = time.Duration(*timeoutSec) * time.Second
-	serversPool = []string{
-		"server1:8080",
-		"server2:8080",
-		"server3:8080",
-	}
+	timeout      = time.Duration(*timeoutSec) * time.Second
+	serversPool  = []string{"server1:8080", "server2:8080", "server3:8080"}
+	healthyMutex sync.Mutex
+	healthyPool  []string
 )
 
 func scheme() string {
@@ -49,6 +48,21 @@ func health(dst string) bool {
 		return false
 	}
 	return true
+}
+
+func updateHealth() {
+	for range time.Tick(10 * time.Second) {
+		var updatedPool []string
+		for _, server := range serversPool {
+			if health(server) {
+				updatedPool = append(updatedPool, server)
+			}
+		}
+		healthyMutex.Lock()
+		healthyPool = updatedPool
+		healthyMutex.Unlock()
+		log.Println("Updated healthy servers:", healthyPool)
+	}
 }
 
 func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
@@ -84,22 +98,28 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
 	}
 }
 
+func hashPath(path string) int {
+	h := fnv.New32a()
+	h.Write([]byte(path))
+	return int(h.Sum32())
+}
+
 func main() {
 	flag.Parse()
 
-	// TODO: Використовуйте дані про стан сервреа, щоб підтримувати список тих серверів, яким можна відправляти ззапит.
-	for _, server := range serversPool {
-		server := server
-		go func() {
-			for range time.Tick(10 * time.Second) {
-				log.Println(server, health(server))
-			}
-		}()
-	}
+	go updateHealth()
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// TODO: Рееалізуйте свій алгоритм балансувальника.
-		forward(serversPool[0], rw, r)
+		healthyMutex.Lock()
+		servers := healthyPool
+		healthyMutex.Unlock()
+		if len(servers) == 0 {
+			http.Error(rw, "No healthy servers available", http.StatusServiceUnavailable)
+			return
+		}
+
+		serverIndex := hashPath(r.URL.Path) % len(servers)
+		forward(servers[serverIndex], rw, r)
 	}))
 
 	log.Println("Starting load balancer...")
