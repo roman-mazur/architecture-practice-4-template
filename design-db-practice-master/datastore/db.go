@@ -16,8 +16,8 @@ var ErrNotFound = fmt.Errorf("record does not exist")
 type hashIndex map[string]int64
 
 type Db struct {
-	out *os.File
-	outPath string
+	out       *os.File
+	outPath   string
 	outOffset int64
 
 	index hashIndex
@@ -55,7 +55,7 @@ func (db *Db) recover() error {
 	for err == nil {
 		var (
 			header, data []byte
-			n int
+			n            int
 		)
 		header, err = in.Peek(bufSize)
 		if err == io.EOF {
@@ -79,7 +79,7 @@ func (db *Db) recover() error {
 				return fmt.Errorf("corrupted file")
 			}
 
-			var e entry
+			var e Entry
 			e.Decode(data)
 			db.index[e.key] = db.outOffset
 			db.outOffset += int64(n)
@@ -118,7 +118,7 @@ func (db *Db) Get(key string) (string, error) {
 }
 
 func (db *Db) Put(key, value string) error {
-	e := entry{
+	e := Entry{
 		key:   key,
 		value: value,
 	}
