@@ -27,7 +27,7 @@ func TestDb_Put(t *testing.T) {
 		{"key3", "value3"},
 	}
 
-	outFile, err := os.Open(filepath.Join(dir, outFileName))
+	outFile, err := os.Open(filepath.Join(dir, outFileName+"0"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestDb_Segments_Merge(t *testing.T) {
 	}
 	defer os.RemoveAll(saveDirectory)
 
-	db, err := NewDb(saveDirectory, 45) // size as 2nd argument
+	db, err := NewDb(saveDirectory, 55) // size as 2nd argument
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestDb_Segments_Merge(t *testing.T) {
 	})
 
 	t.Run("check starting segmentation", func(t *testing.T) {
-		db.Put("key2", "V2")
+		db.Put("key2", "V222")
 		actual := len(db.segments)
 		expected := 3
 		if actual != expected {
@@ -140,7 +140,7 @@ func TestDb_Segments_Merge(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		expected := "V2"
+		expected := "V222"
 		if actual != expected {
 			t.Errorf("An error occurred during segmentation. Expected value: %s, Actual one: %s", expected, actual)
 		}
@@ -152,10 +152,10 @@ func TestDb_Segments_Merge(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		
+
 		inf, _ := file.Stat()
 		actual := inf.Size()
-		expected := int64(45)
+		expected := int64(72)
 		if actual != expected {
 			t.Errorf("An error occurred during segmentation. Expected size %d, Actual one: %d", expected, actual)
 		}

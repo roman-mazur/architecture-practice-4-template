@@ -321,6 +321,14 @@ func (db *Db) Put(key, value string) error {
 	return <-db.putDone
 }
 
+func (db *Db) Delete(key string) error {
+	resp := make(chan error)
+	db.deleteOps <- DeleteOp{key: key, resp: resp}
+	err := <-resp
+	close(resp)
+	return err
+}
+
 func (db *Db) getLastSegment() *Segment {
 	return db.segments[len(db.segments)-1]
 }
