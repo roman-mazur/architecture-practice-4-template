@@ -15,13 +15,13 @@ func TestDb_Put(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	db, err := NewDb(dir)
+	db, err := NewDb(dir, 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 
-	pairs := [][]string {
+	pairs := [][]string{
 		{"key1", "value1"},
 		{"key2", "value2"},
 		{"key3", "value3"},
@@ -65,7 +65,7 @@ func TestDb_Put(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if size1 * 2 != outInfo.Size() {
+		if size1*2 != outInfo.Size() {
 			t.Errorf("Unexpected size (%d vs %d)", size1, outInfo.Size())
 		}
 	})
@@ -74,7 +74,7 @@ func TestDb_Put(t *testing.T) {
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
-		db, err = NewDb(dir)
+		db, err = NewDb(dir, 1024)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -35,6 +35,10 @@ func (e *Entry) Decode(input []byte) {
 	e.value = string(valBuf)
 }
 
+func (e *Entry) GetLength() int64 {
+	return int64(len(e.key) + len(e.value) + 12)
+}
+
 func readValue(in *bufio.Reader) (string, error) {
 	header, err := in.Peek(8)
 	if err != nil {
