@@ -161,3 +161,44 @@ func TestDb_Segments_Merge(t *testing.T) {
 		}
 	})
 }
+
+func TestDb_Delete(t *testing.T) {
+	saveDirectory, err := ioutil.TempDir("", "testDir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(saveDirectory)
+
+	db, err := NewDb(saveDirectory, 55)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	t.Run("delete", func(t *testing.T) {
+		db.Put("key1", "v1")
+		db.Put("key2", "v2")
+		db.Put("key3", "v3")
+		db.Delete("key2")
+		_, err := db.Get("key2")
+		if err == nil {
+			t.Error("Expected an error while getting a deleted key")
+		}
+		if err != ErrNotFound {
+			t.Error(err)
+		}
+	})
+
+	t.Run("delete non existing key", func(t *testing.T) {
+		db.Put("key1", "v1")
+		db.Delete("key2")
+		_, err := db.Get("key2")
+		if err == nil {
+			t.Error("Expected an error while getting a deleted key")
+		}
+		if err != ErrNotFound {
+			t.Error(err)
+		}
+	})
+
+}
