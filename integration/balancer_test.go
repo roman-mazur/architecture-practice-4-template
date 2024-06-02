@@ -25,21 +25,26 @@ func TestBalancer(t *testing.T) {
 		t.Skip("Integration test is not enabled")
 	}
 
-	numRequests := 3
+	var hosts []string
 
-	servers := make([]string, numRequests)
+	// TODO: Реалізуйте інтеграційний тест для балансувальникка.
+	for i := 0; i < 10; i++ {
+		resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", baseAddress))
+		if err != nil {
+			t.Error(err)
+		}
+		defer resp.Body.Close()
 
-	addresses := generateAPIAddresses(numRequests)
-
-	for i, addr := range addresses {
-		servers[i] = getServerName(t, addr)
+		host := resp.Header.Get("lb-from");
+		if (!contains(hosts, host)) {
+			hosts = append(hosts, host)
+		}
+		t.Logf("response from [%s]", resp.Header.Get("lb-from"))
 	}
 
-	if servers[0] != servers[2] {
-		t.Errorf("Different servers for the same address: got %s and %s", servers[0], servers[2])
+	if len(hosts) < 3 {
+		t.Errorf("expected at least 3 hosts, got %d", len(hosts))
 	}
-
-	checkResponseBody(t, "lospollosbrovaros")
 }
 
 func generateAPIAddresses(num int) []string {
@@ -128,4 +133,13 @@ func BenchmarkBalancer(b *testing.B) {
 		}
 		resp.Body.Close()
 	}
+}
+
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }
