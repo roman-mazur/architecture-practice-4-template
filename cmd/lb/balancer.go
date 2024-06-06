@@ -4,8 +4,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/roman-mazur/architecture-practice-4-template/httptools"
-	"github.com/roman-mazur/architecture-practice-4-template/signal"
+	"github.com/VladiusVostokus/SEC-3-lab4/httptools"
+	"github.com/VladiusVostokus/SEC-3-lab4/signal"
 	"hash/fnv"
 	"io"
 	"log"
@@ -98,9 +98,9 @@ func main() {
 	}
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		healtyServersPool := healtyServers(serversPool)
-		serverIndex := hash(r.URL.Path) % len(healtyServersPool)
-		forward(healtyServersPool[serverIndex], rw, r)
+		healthyServersPool := healthyServers(serversPool)
+		serverIndex := hash(r.URL.Path) % len(healthyServersPool)
+		forward(healthyServersPool[serverIndex], rw, r)
 	}))
 
 	log.Println("Starting load balancer...")
@@ -116,12 +116,12 @@ func hash(url string) int {
 	return int(sum)
 }
 
-func healtyServers(servers []string) []string {
-	healtyServersPool := make([]string, 0, 3)
+func healthyServers(servers []string) []string {
+	healthyServersPool := make([]string, 0, 3)
 	for _, server := range servers {
 		if health(server) {
-			healtyServersPool = append(healtyServersPool, server)
+			healthyServersPool = append(healthyServersPool, server)
 		}
 	}
-	return healtyServersPool
+	return healthyServersPool
 }
