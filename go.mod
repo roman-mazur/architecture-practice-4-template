@@ -1,3 +1,3 @@
-module github.com/roman-mazur/architecture-practice-4-template
+module github.com/VladiusVostokus/SEC-3-lab4
 
 go 1.22
