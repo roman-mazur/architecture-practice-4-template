@@ -98,9 +98,9 @@ func main() {
 	}
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// TODO: Рееалізуйте свій алгоритм балансувальника.
-		serverIndex := hash(r.URL.Path) % len(serversPool)
-		forward(serversPool[serverIndex], rw, r)
+		healtyServersPool := healtyServers(serversPool)
+		serverIndex := hash(r.URL.Path) % len(healtyServersPool)
+		forward(healtyServersPool[serverIndex], rw, r)
 	}))
 
 	log.Println("Starting load balancer...")
@@ -114,4 +114,14 @@ func hash(url string) int {
 	h.Write([]byte(url))
 	sum := h.Sum32()
 	return int(sum)
+}
+
+func healtyServers(servers []string) []string {
+	healtyServersPool := make([]string, 0, 3)
+	for _, server := range servers {
+		if health(server) {
+			healtyServersPool = append(healtyServersPool, server)
+		}
+	}
+	return healtyServersPool
 }
