@@ -9,3 +9,4 @@ if [ -z $bin ]; then
 fi
 
 exec ./$bin $@
+CRLF
