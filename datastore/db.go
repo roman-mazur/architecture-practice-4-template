@@ -14,6 +14,7 @@ import (
 )
 
 const segFilePrefix = "segment-"
+const bufSize = 8192
 
 var ErrNotFound = fmt.Errorf("record does not exist")
 
@@ -94,8 +95,6 @@ func NewDb(dir string, segSizeLimit int64) (*Db, error) {
 	}
 	return db, nil
 }
-
-const bufSize = 8192
 
 func (db *Db) recover() error {
 	// start recovery from oldest segment
@@ -221,9 +220,96 @@ func (db *Db) Put(key, value string) error {
 		if err != nil {
 			return err
 		}
+		//go db.compactSegments()
 		db.out = f
 		db.outOffset = 0
 	}
+
+	return nil
+}
+
+func (db *Db) compactSegments() error {
+	// Check if there are at least 2 segments to compact
+	if len(db.segments) < 2 {
+		return nil
+	}
+
+	// Identify the two oldest segments
+	seg1Path := db.segments[0].Name()
+	seg2Path := db.segments[1].Name()
+
+	s1, err := os.OpenFile(seg1Path, os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer s1.Close()
+
+	s2, err := os.OpenFile(seg2Path, os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer s2.Close()
+
+	// Create a new merged segment
+	mergedSegmentPath := seg1Path // This segment will be replaced.
+	newFile, err := os.OpenFile(
+		mergedSegmentPath+"_new", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return err
+	}
+
+	// This function will go through each segment, read all keys and values,
+	// add them to a new map if they're not already there.
+	// The new entries will then be written to the merged segment.
+	var newPos int64 = 0
+	newIndices := make(hashIndex)
+	for _, seg := range [...]*os.File{s1, s2} {
+		reader := bufio.NewReader(seg)
+		for {
+			var e entry
+			buf := make([]byte, bufSize)
+			_, err := reader.Read(buf)
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				return err
+			}
+			e.Decode(buf)
+
+			_, exists := newIndices[e.key]
+			if !exists {
+				data := e.Encode()
+				_, err := newFile.Write(data)
+				if err != nil {
+					return err
+				}
+				newIndices[e.key] = keyValuePosition{
+					position: newPos,
+					segment:  len(db.segments),
+				}
+				newPos += int64(len(data))
+			}
+		}
+	}
+
+	// Replace the old segments info with the new segment
+	newFile.Close()
+	os.Rename(mergedSegmentPath+"_new", mergedSegmentPath)
+	db.segments[0], err = os.OpenFile(mergedSegmentPath, os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+
+	// Remove the second oldest segment.
+	db.segments = append(db.segments[:1], db.segments[2:]...)
+
+	// Update the in-memory hash index
+	for k, v := range newIndices {
+		db.index[k] = v
+	}
+
+	// Delete the old segment file
+	os.Remove(seg2Path)
 
 	return nil
 }
