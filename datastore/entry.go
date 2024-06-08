@@ -6,11 +6,11 @@ import (
 	"fmt"
 )
 
-type entry struct {
+type Entry struct {
 	key, value string
 }
 
-func (e *entry) Encode() []byte {
+func (e *Entry) Encode() []byte {
 	kl := len(e.key)
 	vl := len(e.value)
 	size := kl + vl + 12
@@ -23,7 +23,7 @@ func (e *entry) Encode() []byte {
 	return res
 }
 
-func (e *entry) Decode(input []byte) {
+func (e *Entry) Decode(input []byte) {
 	kl := binary.LittleEndian.Uint32(input[4:])
 	keyBuf := make([]byte, kl)
 	copy(keyBuf, input[8:kl+8])
@@ -45,7 +45,6 @@ func readValue(in *bufio.Reader) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	header, err = in.Peek(4)
 	if err != nil {
 		return "", err
@@ -55,7 +54,6 @@ func readValue(in *bufio.Reader) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	data := make([]byte, valSize)
 	n, err := in.Read(data)
 	if err != nil {
@@ -66,4 +64,12 @@ func readValue(in *bufio.Reader) (string, error) {
 	}
 
 	return string(data), nil
+}
+
+func getLength(key string, value string) int64 {
+	return int64(len(key) + len(value) + 12)
+}
+
+func (e *Entry) GetLength() int64 {
+	return getLength(e.key, e.value)
 }
