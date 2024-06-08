@@ -39,4 +39,15 @@ func (s *BalancerSuite) TestBalancerComponents(c *check.C) {
 	healthyServersPool := healthyServers(serversPool)
 	c.Assert(len(healthyServersPool), check.Equals, 3)
 
+	//previously prepared urls with known hash
+	hash0 := hash("http://localhost1")
+	hash2 := hash("http://localhost2")
+	hash1 := hash("http://localhost0")
+
+	index0 := hash0 % len(healthyServersPool)
+	index2 := hash2 % len(healthyServersPool)
+	index1 := hash1 % len(healthyServersPool)
+	c.Assert(index0, check.Equals, 0)
+	c.Assert(index2, check.Equals, 2)
+	c.Assert(index1, check.Equals, 1)
 }
