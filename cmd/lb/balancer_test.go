@@ -2,6 +2,7 @@ package main
 
 import (
 	"gopkg.in/check.v1"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -50,4 +51,26 @@ func (s *BalancerSuite) TestBalancerComponents(c *check.C) {
 	c.Assert(index0, check.Equals, 0)
 	c.Assert(index2, check.Equals, 2)
 	c.Assert(index1, check.Equals, 1)
+
+	req0 := httptest.NewRequest("GET", "http://localhost1", nil)
+	req1 := httptest.NewRequest("GET", "http://localhost0", nil)
+	req2 := httptest.NewRequest("GET", "http://localhost2", nil)
+
+	w := httptest.NewRecorder()
+	forward(healthyServersPool[index0], w, req0)
+	resp1 := w.Result()
+	body1, _ := ioutil.ReadAll(resp1.Body)
+	c.Assert(string(body1), check.Equals, "server1")
+
+	w = httptest.NewRecorder()
+	forward(healthyServersPool[index1], w, req1)
+	resp0 := w.Result()
+	body0, _ := ioutil.ReadAll(resp0.Body)
+	c.Assert(string(body0), check.Equals, "server2")
+
+	w = httptest.NewRecorder()
+	forward(healthyServersPool[index2], w, req2)
+	resp2 := w.Result()
+	body2, _ := ioutil.ReadAll(resp2.Body)
+	c.Assert(string(body2), check.Equals, "server3")
 }
