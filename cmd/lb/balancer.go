@@ -14,13 +14,10 @@ import (
 	"github.com/roman-mazur/architecture-practice-4-template/signal"
 )
 
-
-
 var (
-	port = flag.Int("port", 8090, "load balancer port")
-	timeoutSec = flag.Int("timeout-sec", 3, "request timeout time in seconds")
-	https = flag.Bool("https", false, "whether backends support HTTPs")
-
+	port        = flag.Int("port", 8090, "load balancer port")
+	timeoutSec  = flag.Int("timeout-sec", 3, "request timeout time in seconds")
+	https       = flag.Bool("https", false, "whether backends support HTTPs")
 	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
 )
 
@@ -29,22 +26,20 @@ type Server struct {
 	Traffic uint64 // Cumulative bytes served
 }
 
-
 var (
-	timeout = time.Duration(*timeoutSec) * time.Second
-	serversPool = []Server{
+	timeout      = time.Duration(*timeoutSec) * time.Second
+	serversPool  = []Server{
 		{Address: "server1:8080", Traffic: 0},
 		{Address: "server2:8080", Traffic: 0},
 		{Address: "server3:8080", Traffic: 0},
 	}
-)
-
-func scheme() string {
-	if *https {
-		return "https"
+	scheme = func() string {
+		if *https {
+			return "https"
+		}
+		return "http"
 	}
-	return "http"
-}
+)
 
 func health(dst string, timeout time.Duration) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -67,64 +62,56 @@ func health(dst string, timeout time.Duration) (bool, error) {
 	return false, fmt.Errorf("health check failed with status code: %d", resp.StatusCode)
 }
 
-
-
 func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
+	ctx, _ := context.WithTimeout(r.Context(), timeout)
+	fwdRequest := r.Clone(ctx)
+	fwdRequest.RequestURI = ""
+	fwdRequest.URL.Host = dst
+	fwdRequest.URL.Scheme = scheme()
+	fwdRequest.Host = dst
 
+	resp, err := http.DefaultClient.Do(fwdRequest)
+	if err == nil {
+		// Copy all headers from the response
+		for k, values := range resp.Header {
+			for _, value := range values {
+				rw.Header().Add(k, value)
+			}
+		}
 
-
-    ctx, _ := context.WithTimeout(r.Context(), timeout)
-    fwdRequest := r.Clone(ctx)
-    fwdRequest.RequestURI = ""
-    fwdRequest.URL.Host = dst
-    fwdRequest.URL.Scheme = scheme()
-    fwdRequest.Host = dst
-
-    resp, err := http.DefaultClient.Do(fwdRequest)
-    if err == nil {
-        // Copy all headers from the response
-        for k, values := range resp.Header {
-            for _, value := range values {
-                rw.Header().Add(k, value)
-            }
-        }
-
-        // Update the traffic for the server that served the request
-        for i := range serversPool {
-            if serversPool[i].Address == dst {
+		// Update the traffic for the server that served the request
+		for i := range serversPool {
+			if serversPool[i].Address == dst {
 				// Inside the forward function, after updating the server's traffic
-log.Printf("Server %s has served %d bytes of traffic.", serversPool[i].Address, serversPool[i].Traffic)
+				log.Printf("Server %s has served %d bytes of traffic.", serversPool[i].Address, serversPool[i].Traffic)
 
-                if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
-                    if bytesServed, err := strconv.ParseUint(contentLength, 10, 64); err == nil {
-                        serversPool[i].Traffic += bytesServed
-                    }
-                }
-                break
-            }
-        }
+				if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
+					if bytesServed, err := strconv.ParseUint(contentLength, 10, 64); err == nil {
+						serversPool[i].Traffic += bytesServed
+					}
+				}
+				break
+			}
+		}
 
-        // Set tracing information if enabled
-        if *traceEnabled {
-            rw.Header().Set("lb-from", dst)
-        }
-        log.Println("fwd", resp.StatusCode, resp.Request.URL)
-        rw.WriteHeader(resp.StatusCode)
-        defer resp.Body.Close()
-        _, err := io.Copy(rw, resp.Body)
-        if err != nil {
-            log.Printf("Failed to write response: %s", err)
-        }
-        return nil
-    } else {
-        log.Printf("Failed to get response from %s: %s", dst, err)
-        rw.WriteHeader(http.StatusServiceUnavailable)
-        return err
-    }
+		// Set tracing information if enabled
+		if *traceEnabled {
+			rw.Header().Set("lb-from", dst)
+		}
+		log.Println("fwd", resp.StatusCode, resp.Request.URL)
+		rw.WriteHeader(resp.StatusCode)
+		defer resp.Body.Close()
+		_, err := io.Copy(rw, resp.Body)
+		if err != nil {
+			log.Printf("Failed to write response: %s", err)
+		}
+		return nil
+	} else {
+		log.Printf("Failed to get response from %s: %s", dst, err)
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		return err
+	}
 }
-
-
-
 
 func main() {
 	flag.Parse()
@@ -150,7 +137,7 @@ func main() {
 	// Create the server and define the handler
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		// Select the server with the lowest traffic volume
-		selectedServer, err := selectServer()
+		selectedServer, err := selectServer(serversPool)
 		if err != nil {
 			// Handle the case where no healthy servers are found
 			log.Printf("Failed to select server: %s", err)
@@ -173,9 +160,7 @@ func main() {
 	signal.WaitForTerminationSignal()
 }
 
-
-
-func selectServer() (*Server, error) {
+func selectServer(serversPool []Server) (*Server, error) {
 	var minTrafficServer *Server
 	for i := range serversPool {
 		server := &serversPool[i]
