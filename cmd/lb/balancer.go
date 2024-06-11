@@ -70,6 +70,9 @@ func health(dst string, timeout time.Duration) (bool, error) {
 
 
 func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
+
+
+
     ctx, _ := context.WithTimeout(r.Context(), timeout)
     fwdRequest := r.Clone(ctx)
     fwdRequest.RequestURI = ""
@@ -89,6 +92,9 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
         // Update the traffic for the server that served the request
         for i := range serversPool {
             if serversPool[i].Address == dst {
+				// Inside the forward function, after updating the server's traffic
+log.Printf("Server %s has served %d bytes of traffic.", serversPool[i].Address, serversPool[i].Traffic)
+
                 if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
                     if bytesServed, err := strconv.ParseUint(contentLength, 10, 64); err == nil {
                         serversPool[i].Traffic += bytesServed
@@ -173,7 +179,7 @@ func selectServer() (*Server, error) {
 	var minTrafficServer *Server
 	for i := range serversPool {
 		server := &serversPool[i]
-		fmt.Println("sever traffic", server.Traffic)
+		log.Printf("Server %s traffic: %d", server.Address, server.Traffic)
 		healthy, err := health(server.Address, timeout)
 		if err != nil {
 			// Handle the error, for example, log it or continue with the next server
