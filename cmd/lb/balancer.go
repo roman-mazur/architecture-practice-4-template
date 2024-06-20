@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	port       = flag.Int("port", 8090, "load balancer port")
-	timeoutSec = flag.Int("timeout-sec", 3, "request timeout time in seconds")
-	https      = flag.Bool("https", false, "whether backends support HTTPs")
+	port         = flag.Int("port", 8090, "load balancer port")
+	timeoutSec   = flag.Int("timeout-sec", 3, "request timeout time in seconds")
+	https        = flag.Bool("https", false, "whether backends support HTTPs")
+	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
 
 	serversPool = []string{
 		"server1:8080",
@@ -47,13 +48,23 @@ func health(dst string) bool {
 }
 
 func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
-	fwdRequest := r.Clone(r.Context())
+	ctx, _ := context.WithTimeout(r.Context(), time.Duration(*timeoutSec)*time.Second)
+	fwdRequest := r.Clone(ctx)
 	fwdRequest.URL.Host = dst
 	fwdRequest.URL.Scheme = scheme()
 	fwdRequest.Host = dst
 
 	resp, err := http.DefaultClient.Do(fwdRequest)
 	if err == nil {
+		for k, values := range resp.Header {
+			for _, value := range values {
+				rw.Header().Add(k, value)
+			}
+		}
+		if *traceEnabled {
+			rw.Header().Set("lb-from", dst)
+		}
+		log.Println("fwd", resp.StatusCode, resp.Request.URL)
 		rw.WriteHeader(resp.StatusCode)
 		defer resp.Body.Close()
 		_, err := io.Copy(rw, resp.Body)
@@ -85,6 +96,7 @@ func main() {
 	}))
 
 	log.Println("Starting load balancer...")
+	log.Printf("Tracing support enabled: %t", *traceEnabled)
 	frontend.Start()
 	signal.WaitForTerminationSignal()
 }
