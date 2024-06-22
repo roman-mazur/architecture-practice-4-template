@@ -6,7 +6,13 @@ import (
 	"os"
 	"testing"
 	"time"
+	"github.com/stretchr/testify/assert"
+  	"github.com/stretchr/testify/suite"
 )
+
+type IntegrationSuite struct {
+  suite.Suite
+}
 
 const baseAddress = "http://balancer:8090"
 
