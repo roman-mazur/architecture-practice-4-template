@@ -81,7 +81,7 @@ func NewDb(dir string, segmentSize int64) (*Db, error) {
 		keyPositions: make(chan *KeyPosition),
 		putOps:       make(chan PutOp),
 		putDone:      make(chan error),
-		readOps:      make(chan ReadOp, 10), // Limit concurrent read operations
+		readOps:      make(chan ReadOp, 10), // Обмеження кількості паралельних операцій читання
 	}
 
 	if err := db.createSegment(); err != nil {
@@ -124,7 +124,8 @@ func (db *Db) startIndexRoutine() {
 
 func (db *Db) startPutRoutine() {
 	go func() {
-		for op := range db.putOps {
+		for {
+			op := <-db.putOps
 			db.fileMutex.Lock()
 			length := op.entry.GetLength()
 			stat, err := db.out.Stat()
@@ -146,11 +147,10 @@ func (db *Db) startPutRoutine() {
 				db.indexOps <- IndexOp{
 					isWrite: true,
 					key:     op.entry.key,
-					index:   db.outOffset,
+					index:   int64(n),
 				}
-				db.outOffset += int64(n)
 			}
-			op.resp <- err
+			op.resp <- nil
 			db.fileMutex.Unlock()
 		}
 	}()
@@ -163,13 +163,13 @@ func (db *Db) startReadWorkers(numWorkers int) {
 				keyPos := db.getPos(op.key)
 				if keyPos == nil {
 					op.errResp <- ErrNotFound
-					continue
-				}
-				value, err := keyPos.segment.getFromSegment(keyPos.position)
-				if err != nil {
-					op.errResp <- err
 				} else {
-					op.resp <- value
+					value, err := keyPos.segment.getFromSegment(keyPos.position)
+					if err != nil {
+						op.errResp <- err
+					} else {
+						op.resp <- value
+					}
 				}
 			}
 		}()
@@ -268,7 +268,11 @@ func (db *Db) recoverSegment(segment *Segment) error {
 	}
 	defer f.Close()
 
-	return db.recover(f)
+	if err := db.recover(f); err != nil && err != io.EOF {
+		return err
+	}
+
+	return nil
 }
 
 func (db *Db) recover(f *os.File) error {

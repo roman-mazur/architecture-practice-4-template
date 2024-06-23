@@ -26,27 +26,26 @@ func TestDb_Put(t *testing.T) {
 		{"3", "v3"},
 	}
 
+	outFile, err := os.Open(filepath.Join(dir, outFileName+"0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	t.Run("put/get", func(t *testing.T) {
 		for _, pair := range pairs {
 			err := db.Put(pair[0], pair[1])
 			if err != nil {
-				t.Errorf("Cannot put %s: %s", pair[0], err)
+				t.Errorf("Cannot put %s: %s", pairs[0], err)
 			}
 			value, err := db.Get(pair[0])
 			if err != nil {
-				t.Errorf("Cannot get %s: %s", pair[0], err)
+				t.Errorf("Cannot get %s: %s", pairs[0], err)
 			}
 			if value != pair[1] {
 				t.Errorf("Bad value returned expected %s, got %s", pair[1], value)
 			}
 		}
 	})
-
-	outFile, err := os.Open(filepath.Join(dir, outFileName+"0"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer outFile.Close()
 
 	outInfo, err := outFile.Stat()
 	if err != nil {
@@ -58,13 +57,8 @@ func TestDb_Put(t *testing.T) {
 		for _, pair := range pairs {
 			err := db.Put(pair[0], pair[1])
 			if err != nil {
-				t.Errorf("Cannot put %s: %s", pair[0], err)
+				t.Errorf("Cannot put %s: %s", pairs[0], err)
 			}
-		}
-		outFile.Close()
-		outFile, err = os.Open(filepath.Join(dir, outFileName+"0"))
-		if err != nil {
-			t.Fatal(err)
 		}
 		outInfo, err := outFile.Stat()
 		if err != nil {
@@ -79,16 +73,15 @@ func TestDb_Put(t *testing.T) {
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
-		db, err = NewDb(dir, 45)
+		db, err = NewDb(dir, 10)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer db.Close()
 
 		for _, pair := range pairs {
 			value, err := db.Get(pair[0])
 			if err != nil {
-				t.Errorf("Cannot get %s: %s", pair[0], err)
+				t.Errorf("Cannot put %s: %s", pairs[0], err)
 			}
 			if value != pair[1] {
 				t.Errorf("Bad value returned expected %s, got %s", pair[1], value)
@@ -104,6 +97,7 @@ func TestDb_Segmentation(t *testing.T) {
 	}
 	defer os.RemoveAll(saveDirectory)
 
+	
 	db, err := NewDb(saveDirectory, 35)
 	if err != nil {
 		t.Fatal(err)
@@ -124,9 +118,9 @@ func TestDb_Segmentation(t *testing.T) {
 
 	t.Run("check starting segmentation", func(t *testing.T) {
 		db.Put("4", "v4")
-		actualThreeFiles := len(db.segmentManager.segments)
+		actualTreeFiles := len(db.segmentManager.segments)
 		expected3Files := 3
-		if actualThreeFiles != expected3Files {
+		if actualTreeFiles != expected3Files {
 			t.Errorf("An error occurred during segmentation. Expected 3 files, but received %d.", len(db.segmentManager.segments))
 		}
 
