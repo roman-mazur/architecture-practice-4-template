@@ -12,65 +12,64 @@ import (
 	"github.com/TarnishedGhost/LabGo4/signal"
 )
 
-var serverPort = flag.Int("port", 8083, "server port")
+var port = flag.Int("port", 8083, "server port")
 
-type JsonResponse struct {
+type Response struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
 
-type JsonRequest struct {
+type Request struct {
 	Value string `json:"value"`
 }
 
 func main() {
-	mux := new(http.ServeMux)
-	tempDir, err := os.MkdirTemp("", "temp-dir")
+	h := new(http.ServeMux)
+	dir, err := os.MkdirTemp("", "temp-dir")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	db, _ := datastore.NewDb(tempDir, 250)
-	defer db.Close()
+	Db, _ := datastore.NewDb(dir, 250)
+	defer Db.Close()
 
-	mux.HandleFunc("/db/", func(responseWriter http.ResponseWriter, request *http.Request) {
-		requestURL := request.URL.String()
-		key := requestURL[4:]
+	h.HandleFunc("/db/", func(rw http.ResponseWriter, req *http.Request) {
+		url := req.URL.String()
+		key := url[4:]
 
-		switch request.Method {
+		switch req.Method {
 		case "GET":
-			value, err := db.Get(key)
+			value, err := Db.Get(key)
 			if err != nil {
-				responseWriter.WriteHeader(http.StatusNotFound)
+				rw.WriteHeader(http.StatusNotFound)
 				return
 			}
-			responseWriter.WriteHeader(http.StatusOK)
-			responseWriter.Header().Set("content-type", "application/json")
-			_ = json.NewEncoder(responseWriter).Encode(JsonResponse{
+			rw.WriteHeader(http.StatusOK)
+			rw.Header().Set("content-type", "application/json")
+			_ = json.NewEncoder(rw).Encode(Response{
 				Key:   key,
 				Value: value,
 			})
 		case "POST":
-			var requestBody JsonRequest
+			var body Request
 
-			err := json.NewDecoder(request.Body).Decode(&requestBody)
+			err := json.NewDecoder(req.Body).Decode(&body)
 			if err != nil {
-				responseWriter.WriteHeader(http.StatusBadRequest)
-				return
+				rw.WriteHeader(http.StatusBadRequest)
 			}
 
-			err = db.Put(key, requestBody.Value)
+			err = Db.Put(key, body.Value)
 			if err != nil {
-				responseWriter.WriteHeader(http.StatusInternalServerError)
+				rw.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-			responseWriter.WriteHeader(http.StatusCreated)
+			rw.WriteHeader(http.StatusCreated)
 		default:
-			responseWriter.WriteHeader(http.StatusBadRequest)
+			rw.WriteHeader(http.StatusBadRequest)
 		}
 	})
 
-	server := httptools.CreateServer(*serverPort, mux)
+	server := httptools.CreateServer(*port, h)
 	server.Start()
 	signal.WaitForTerminationSignal()
 }
