@@ -1,7 +1,17 @@
-FROM golang:1.24 AS build
+FROM golang:1.24 
 
-WORKDIR /go/src/practice-4
+WORKDIR /app
+
 COPY . .
 
-ENV INTEGRATION_TEST=1
-ENTRYPOINT ["go", "test", "./integration"]
+RUN go mod download
+
+CMD ["go", "test", "-v", "."]
+
+
+
+WORKDIR /app/integration
+
+RUN find /app -type f
+
+CMD ["go", "test", "-v", "."]

@@ -3,7 +3,7 @@ FROM golang:1.24 AS build
 WORKDIR /go/src/practice-4
 COPY . .
 
-RUN go test ./...
+RUN go test ./cmd/... ./httptools ./signal
 ENV CGO_ENABLED=0
 RUN go install ./cmd/...
 
