@@ -4,13 +4,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
-	"github.com/roman-mazur/architecture-practice-4-template/httptools"
-	"github.com/roman-mazur/architecture-practice-4-template/signal"
+	"github.com/bndrchuk-artem/trenbolonchiki-lab4/httptools"
+	"github.com/bndrchuk-artem/trenbolonchiki-lab4/signal"
 )
 
 var (
@@ -28,7 +30,47 @@ var (
 		"server2:8080",
 		"server3:8080",
 	}
+	healthyServersMutex sync.RWMutex
+	healthyServers      []string
 )
+
+func hash(s string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return h.Sum32()
+}
+
+func chooseServer(clientAddr string, servers []string) string {
+	if len(servers) == 0 {
+		return ""
+	}
+
+	serverIndex := int(hash(clientAddr)) % len(servers)
+	return servers[serverIndex]
+}
+
+func getHealthyServers() []string {
+	healthyServersMutex.RLock()
+	defer healthyServersMutex.RUnlock()
+
+	result := make([]string, len(healthyServers))
+	copy(result, healthyServers)
+	return result
+}
+
+func updateHealthyServers() {
+	var healthy []string
+
+	for _, server := range serversPool {
+		if health(server) {
+			healthy = append(healthy, server)
+		}
+	}
+
+	healthyServersMutex.Lock()
+	healthyServers = healthy
+	healthyServersMutex.Unlock()
+}
 
 func scheme() string {
 	if *https {
@@ -87,19 +129,39 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
 func main() {
 	flag.Parse()
 
-	// TODO: Використовуйте дані про стан сервера, щоб підтримувати список тих серверів, яким можна відправляти запит.
+	updateHealthyServers()
+
 	for _, server := range serversPool {
 		server := server
 		go func() {
 			for range time.Tick(10 * time.Second) {
-				log.Println(server, "healthy:", health(server))
+				isHealthy := health(server)
+				log.Println(server, "healthy:", isHealthy)
+
+				updateHealthyServers()
 			}
 		}()
 	}
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// TODO: Реалізуйте свій алгоритм балансувальника.
-		forward(serversPool[0], rw, r)
+		currentHealthyServers := getHealthyServers()
+
+		if len(currentHealthyServers) == 0 {
+			log.Println("No healthy servers available")
+			rw.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
+		targetServer := chooseServer(r.RemoteAddr, currentHealthyServers)
+
+		if targetServer == "" {
+			log.Println("Failed to choose target server")
+			rw.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
+		log.Printf("Forwarding request from %s to %s", r.RemoteAddr, targetServer)
+		forward(targetServer, rw, r)
 	}))
 
 	log.Println("Starting load balancer...")
